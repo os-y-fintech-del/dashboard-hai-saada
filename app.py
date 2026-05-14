@@ -4,61 +4,58 @@
 Dashboard Server - حي السعادة 132
 تطبيق ويب حي يعرض بيانات الإكسل بشكل مستمر
 """
-
+ 
 from flask import Flask, render_template_string, jsonify
 from flask_cors import CORS
-import pandas as pd
+from openpyxl import load_workbook
 from datetime import datetime
 import os
 import json
-
+ 
 app = Flask(__name__)
 CORS(app)
-
+ 
 # ===== CONFIGURATION =====
 EXCEL_FILE = "dashboard_data.xlsx"
-
-def extract_dashboard_value(df, label_text, column_index=2):
+ 
+def get_dashboard_value(ws, label_text, column_index=2):
     """استخراج قيمة من شيت Dashboard"""
     try:
-        for idx, row in df.iterrows():
-            if pd.notna(row[1]):
-                cell_value = str(row[1]).strip()
-                if label_text in cell_value:
-                    if pd.notna(row[column_index]):
-                        return float(row[column_index])
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row, values_only=True):
+            if row[1] and label_text in str(row[1]):
+                if row[column_index]:
+                    return float(row[column_index])
         return 0
     except:
         return 0
-
+ 
 def get_dashboard_data():
     """قراءة بيانات Dashboard من الإكسل"""
     try:
         if not os.path.exists(EXCEL_FILE):
             return None
-            
-        df_dashboard = pd.read_excel(EXCEL_FILE, sheet_name='Dashboard', header=None)
         
-        total_sales = extract_dashboard_value(df_dashboard, "إجمالي المبيعات لكامل المشروع")
-        collected = extract_dashboard_value(df_dashboard, "الدفعات المحصلة")
-        collection_rate = extract_dashboard_value(df_dashboard, "نسبة التحصيل من كامل المشروع") * 100
-        completion = extract_dashboard_value(df_dashboard, "نسبة الإنجاز الفعلية") * 100
-        trust_total = extract_dashboard_value(df_dashboard, "الإجمالي", 4)
+        wb = load_workbook(EXCEL_FILE)
+        ws_dashboard = wb['Dashboard']
+        
+        total_sales = get_dashboard_value(ws_dashboard, "إجمالي المبيعات لكامل المشروع")
+        collected = get_dashboard_value(ws_dashboard, "الدفعات المحصلة")
+        collection_rate = get_dashboard_value(ws_dashboard, "نسبة التحصيل من كامل المشروع") * 100
+        completion = get_dashboard_value(ws_dashboard, "نسبة الإنجاز الفعلية") * 100
+        trust_total = get_dashboard_value(ws_dashboard, "الإجمالي", 4)
         
         # قراءة الوحدات
-        df_units = pd.read_excel(EXCEL_FILE, sheet_name='العملاء والوحدات')
-        
         total_units = 0
         sold_units = 0
         
-        for idx, row in df_dashboard.iterrows():
-            if pd.notna(row[1]):
+        for row in ws_dashboard.iter_rows(min_row=1, max_row=ws_dashboard.max_row, values_only=True):
+            if row[1]:
                 cell_value = str(row[1]).strip()
                 if "عدد الوحدات" in cell_value and "المباعة" not in cell_value:
-                    if pd.notna(row[2]):
+                    if row[2]:
                         total_units = int(float(row[2]))
                 elif "عدد الوحدات المباعة" in cell_value:
-                    if pd.notna(row[2]):
+                    if row[2]:
                         sold_units = int(float(row[2]))
         
         data = {
@@ -79,13 +76,13 @@ def get_dashboard_data():
     except Exception as e:
         print(f"خطأ: {e}")
         return None
-
+ 
 def format_number(num):
     """تنسيق الأرقام"""
     if num is None or num == 0:
         return "0"
     return f"{num:,.0f}"
-
+ 
 @app.route('/api/data')
 def api_data():
     """API لإرجاع البيانات JSON"""
@@ -93,7 +90,7 @@ def api_data():
     if data:
         return jsonify(data)
     return jsonify({'error': 'No data'}), 500
-
+ 
 @app.route('/')
 def dashboard():
     """الصفحة الرئيسية للداش بورد"""
@@ -583,7 +580,7 @@ def dashboard():
 </html>"""
     
     return html
-
+ 
 if __name__ == '__main__':
     print("=" * 60)
     print("🚀 تطبيق الداش بورد جاهز!")
